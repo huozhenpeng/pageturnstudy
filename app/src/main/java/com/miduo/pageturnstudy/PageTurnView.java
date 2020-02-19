@@ -8,6 +8,7 @@ import android.graphics.Paint;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.widget.Toast;
 
 import androidx.annotation.Nullable;
 
@@ -39,6 +40,7 @@ public class PageTurnView extends View {
 
     public PageTurnView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
+        this.context=context;
         init();
     }
 
@@ -81,6 +83,8 @@ public class PageTurnView extends View {
 
         autoAreaLeft=mViewWidth*1/5f;
         autoAreaRight=mViewWidth*4/5f;
+
+        harfWidth=mViewWidth*1/2f;
     }
 
     @Override
@@ -96,20 +100,87 @@ public class PageTurnView extends View {
     }
 
     private float mClipX;
+    private float mCurPointX;
+    private int pageIndex;
+    private boolean moveValidate;
     @Override
     public boolean onTouchEvent(MotionEvent event) {
         switch (event.getAction()&MotionEvent.ACTION_MASK)
         {
 
+            case MotionEvent.ACTION_DOWN:
+                //上一页、下一页的判断还是应该在down中进行
+
+                //因为我们每次只绘制两张图片
+                //所以在翻上一页的时候必须先减
+                //在翻下一页的时候，在结束后再加
+                mCurPointX=event.getX();
+                if(mCurPointX<autoAreaLeft)
+                {
+                    if(pageIndex==0)
+                    {
+                        moveValidate=false;
+                        Toast.makeText(context,"第一页了",Toast.LENGTH_SHORT).show();
+                    }
+                    else
+                    {
+                        //代表上一页
+                        isNextPage=false;
+                        pageIndex--;
+                        moveValidate=true;
+                        mClipX=mCurPointX;
+                    }
+
+                }
+                else if(mCurPointX>autoAreaRight)
+                {
+                    if(pageIndex==mBitmaps.size()-1)
+                    {
+                        moveValidate=false;
+                        Toast.makeText(context,"最后一页了",Toast.LENGTH_SHORT).show();
+                    }
+                    else
+                    {
+                        //代表要翻下一页
+                        isNextPage=true;
+                        //pageIndex++;
+                        moveValidate=true;
+                        mClipX=mCurPointX;
+                    }
+
+                }
+                else
+                {
+                    //其他区域无效，不发生翻页效果
+                    moveValidate=false;
+                }
+                break;
             case MotionEvent.ACTION_UP:
                 //判断是否需要自动滑动
-                judgeSlideAuto();
+                if(moveValidate)
+                {
+                    judgeSlideAuto();
+
+                    //动画结束之后再判断
+
+                    if(isNextPage&&mClipX<=0)
+                    {
+                        pageIndex++;
+                        mClipX=mViewWidth;
+                        invalidate();
+                    }
+
+
+                }
                 break;
 
 
             default:
-                mClipX=event.getX();
-                invalidate();
+                if(moveValidate)
+                {
+                    mClipX=event.getX();
+                    invalidate();
+                }
                 break;
         }
         return true;
@@ -117,18 +188,19 @@ public class PageTurnView extends View {
 
     private float autoAreaLeft;
     private float autoAreaRight;
+    private float harfWidth;
+    private boolean isNextPage;
     private void judgeSlideAuto() {
 
-        if(mClipX<autoAreaLeft)
+        if(mClipX<=harfWidth)
         {
             while (mClipX>0)
             {
                 mClipX--;
                 invalidate();
             }
-
         }
-        else if(mClipX>autoAreaRight)
+        else if(mClipX>harfWidth)
         {
             while(mClipX<mViewWidth)
             {
@@ -138,18 +210,38 @@ public class PageTurnView extends View {
         }
     }
 
+    private Context context;
     private void drawBitmaps(Canvas canvas) {
-        for(int i=0;i<mBitmaps.size();i++)
+
+
+        pageIndex=pageIndex<0?0:pageIndex;
+        pageIndex=pageIndex>mBitmaps.size()?mBitmaps.size():pageIndex;
+        //相当于每张bitmap都是独立的一层
+        //最后绘制的会在最上层
+
+        //其实每次只绘制两张就可以了，最初的时候就是最上面的两张
+        int start=mBitmaps.size()-pageIndex-2;
+        int end=mBitmaps.size()-pageIndex;
+
+        if(start<0)
         {
-            //相当于每张bitmap都是独立的一层
+            Toast.makeText(context,"last",Toast.LENGTH_SHORT).show();
+
+            //强制重置起始位置
+            start=0;
+            end=1;
+        }
+        for(int i=start;i<end;i++)
+        {
             canvas.save();
-            if(i==mBitmaps.size()-1)
+            if(i==end-1)
             {
                 canvas.clipRect(0,0,mClipX,mViewHeight);
             }
             canvas.drawBitmap(mBitmaps.get(i),0,0,null);
             canvas.restore();
         }
+
 
     }
 
